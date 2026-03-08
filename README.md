@@ -17,13 +17,15 @@ A self-hosted universal web scraper API. Extract data from any website with a si
 
 ```bash
 # 1. Start all services
-docker compose -f docker-compose.prod.yml up -d
+docker compose up -d
 
 # 2. Seed the database (first time only)
-docker compose -f docker-compose.prod.yml exec backend ./app seed
+docker compose exec backend ./app seed
 
 # 3. Open the dashboard at http://localhost:3232
 #    Default credentials: admin@crawlstack.com / password
+
+#4. Download/Install the latest Browser from /browser page
 ```
 
 ## API Usage
