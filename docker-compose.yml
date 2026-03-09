@@ -46,7 +46,6 @@ services:
       LC_ALL: en_US.UTF-8
     volumes:
       - uploads:/app/uploads
-      - browser:/opt/camoium
     depends_on:
       db:
         condition: service_healthy
