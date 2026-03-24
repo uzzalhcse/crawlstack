@@ -1,27 +1,16 @@
+# The admin user is auto-seeded on first boot (admin@crawlstack.com / password).
+# Override with ADMIN_EMAIL, ADMIN_NAME, ADMIN_PASSWORD env vars.
+
 services:
-  db:
-    image: postgres:16-alpine
+  mongo:
+    image: mongo:7
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${DB_NAME:-crawlstack}
+      MONGO_INITDB_DATABASE: ${DB_NAME:-crawlstack}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - mongodata:/data/db
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -30,27 +19,25 @@ services:
     image: ghcr.io/camoium/crawlstack/backend:latest
     restart: unless-stopped
     environment:
-      DB_HOST: db
-      DB_PORT: "5432"
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      MONGO_URI: mongodb://mongo:27017
       DB_NAME: ${DB_NAME:-crawlstack}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       JWT_EXPIRY: ${JWT_EXPIRY:-72h}
       APP_PORT: "8082"
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
-      REDIS_ADDR: redis:6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      SCRAPER_URL: http://scraper:${SCRAPER_HTTP_PORT:-8083}
+      SCRAPER_TIMEOUT: ${SCRAPER_TIMEOUT:-120s}
+      API_KEY: ${API_KEY:-}
       TZ: ${TZ:-America/New_York}
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
     volumes:
       - uploads:/app/uploads
     depends_on:
-      db:
+      mongo:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+      scraper:
+        condition: service_started
 
   scraper:
     image: ghcr.io/camoium/crawlstack/scraper:latest
@@ -64,23 +51,47 @@ services:
       - /tmp
       - /run
     environment:
-      REDIS_ADDR: redis:6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      WORKER_COUNT: ${WORKER_COUNT:-4}
-      WARM_POOL_SIZE: ${WARM_POOL_SIZE:-2}
       BROWSER_TIMEOUT: ${BROWSER_TIMEOUT:-120s}
+      HTTP_PORT: ${SCRAPER_HTTP_PORT:-8083}
+      API_KEY: ${API_KEY:-}
       TZ: ${TZ:-America/New_York}
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
       LIBGL_ALWAYS_SOFTWARE: "1"
       GALLIUM_DRIVER: softpipe
+    ports:
+      - "${SCRAPER_HOST_PORT:-8083}:${SCRAPER_HTTP_PORT:-8083}"
     volumes:
       - browser:/opt/camoium
-    depends_on:
-      redis:
-        condition: service_healthy
-    deploy:
-      replicas: 1
+
+  browser-api:
+    image: ghcr.io/camoium/crawlstack/browser-api:latest
+    restart: unless-stopped
+    shm_size: '512mb'
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+    tmpfs:
+      - /tmp
+      - /run
+    environment:
+      PORT: "9222"
+      MAX_SESSIONS: ${BROWSER_API_MAX_SESSIONS:-10}
+      MAX_QUEUE: ${BROWSER_API_MAX_QUEUE:-50}
+      IDLE_TIMEOUT: ${BROWSER_API_IDLE_TIMEOUT:-5m}
+      BROWSER_TIMEOUT: ${BROWSER_API_BROWSER_TIMEOUT:-10m}
+      LAUNCH_TIMEOUT: ${BROWSER_API_LAUNCH_TIMEOUT:-30s}
+      API_KEY: ${API_KEY:-}
+      TZ: ${TZ:-America/New_York}
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      GALLIUM_DRIVER: softpipe
+    ports:
+      - "9222:9222"
+    volumes:
+      - browser-api:/opt/camoium
 
   frontend:
     image: ghcr.io/camoium/crawlstack/frontend:latest
@@ -91,7 +102,7 @@ services:
       - backend
 
 volumes:
-  pgdata:
-  redisdata:
+  mongodata:
   uploads:
   browser:
+  browser-api:

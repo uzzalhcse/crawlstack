@@ -1,87 +1,84 @@
-# CrawlStack
 
-A self-hosted universal web scraper API. Extract data from any website with a single `GET /v1/` request — returns clean HTML, Markdown, or screenshots.
+# Introduction
 
-## Features
+CrawlStack is a self-hosted web scraping toolkit. You give it a URL, it gives you back the page as HTML, Markdown, or a screenshot. Under the hood it runs the [Camoium](https://github.com/camoium) anti-detection browser, which spoofs fingerprints so target sites see a real browser instead of a bot.
 
-- **HTTP Fast Path** — TLS-spoofed requests without launching a browser
-- **Browser Engine** — Real Chrome for JS-heavy & protected sites
-- **Stealth+** — Fingerprint spoofing & virtual display bypass
-- **JS Instructions** — Click, fill, scroll, wait via JSON directives
-- **Session Persistence** — Reuse browser sessions across requests
-- **Proxy Routing** — Built-in premium proxy support
-- **CAPTCHA Solving** — Auto-solve with `solve_captcha=true`
-- **Multiple Output Formats** — HTML, Markdown, or screenshot
+There are two main things you can do with it:
+
+- **Scraping API** — send a GET request, get page content back. Handles JS rendering, CAPTCHA solving, proxies, the whole deal.
+- **Browser API** — connect your own automation scripts (puppeteer, playwright, rod, chromedp) to a managed browser pool over CDP WebSocket. You write the automation, CrawlStack handles the browser lifecycle and fingerprinting.
+
+Both services are protected by an API key (`API_KEY` environment variable). Every request must include the key via `?api_key=` query parameter or `X-API-Key` header. The services won't start without it.
+
+
 
 ## Quick Start
 
 ```bash
-# 1. Start all services
-docker compose up -d
+# 1.Copy the example env file and set your API key
+cp .env.example .env
+# Edit .env and set API_KEY=your-secret-key
 
-# 2. Seed the database (first time only)
-docker compose exec backend ./app seed
+# 2. Start all services
+docker compose up -d
 
 # 3. Open the dashboard at http://localhost:3232
 #    Default credentials: admin@crawlstack.com / password
 
-#4. Download/Install the latest Browser from /browser page
-```
-
-## API Usage
-
-```
-GET /v1/?apikey=<YOUR_API_KEY>&url=<TARGET_URL>
-```
-
-### Parameters
-
-| Parameter | Description |
-|---|---|
-| `apikey` | Your API key (required) |
-| `url` | Target URL to scrape (required) |
-| `js_render` | Enable headless Chrome rendering (`true`/`false`) |
-| `output_format` | `html` (default), `markdown`, or `screenshot` |
-| `wait_for` | CSS selector to wait for before returning |
-| `wait_time` | Extra wait time in ms after selector match |
-| `js_instructions` | JSON array of browser actions (click, fill, wait, evaluate) |
-| `session_id` | Reuse a browser session across requests |
-| `premium_proxy` | Route through premium proxy (`true`/`false`) |
-| `solve_captcha` | Auto-solve CAPTCHAs (`true`/`false`) |
-| `target_os` | Emulate device fingerprint (`windows`, `android`, etc.) |
-
-### Example
-
-```bash
-# Basic scrape
-curl "http://localhost:8082/v1/?apikey=<YOUR_API_KEY>&url=https%3A%2F%2Fexample.com"
-
-# JS rendering with wait
-curl "http://localhost:8082/v1/?apikey=<YOUR_API_KEY>&url=https%3A%2F%2Fexample.com&js_render=true&wait_for=.content"
 ```
 
 ## Architecture
 
-| Service | Image |
-|---|---|
-| **backend** | `ghcr.io/camoium/crawlstack/backend` |
-| **scraper** | `ghcr.io/camoium/crawlstack/scraper` |
-| **frontend** | `ghcr.io/camoium/crawlstack/frontend` |
-| **postgres** | `postgres:16-alpine` |
-| **redis** | `redis:7-alpine` |
+The system is made up of four services. You don't need all of them — the scraper and browser-api work standalone without the backend or frontend.
 
-## Environment Variables
+| Service | Port | What it does |
+|---------|------|-------------|
+| **Scraper** | 8083 | The actual scraping engine. Takes a URL, returns content. |
+| **Browser API** | 9222 | CDP WebSocket proxy for remote browser automation. |
+| **Backend** | 8082 | API gateway with auth. Proxies requests to the scraper. Only needed if you want the web UI. |
+| **Frontend** | 3232 | Web dashboard for testing scrapes and managing settings. Optional. |
 
-```env
-DB_USER=postgres
-DB_PASSWORD=your-secure-password
-DB_NAME=crawlstack
-JWT_SECRET=your-random-secret-key
-JWT_EXPIRY=72h
-FRONTEND_URL=http://localhost:3232
-REDIS_PASSWORD=
-TZ=America/New_York
-WORKER_COUNT=4
-WARM_POOL_SIZE=2
-BROWSER_TIMEOUT=120s
+**Standalone mode** (scraper + browser-api only):
+
+```
+Your code ---GET /scrape?api_key=...--> Scraper (:8083) ---> HTTP fetch or Browser
+Your code ---WebSocket?api_key=...---> Browser API (:9222) ---> Managed browser session
+```
+
+**Full stack mode** (with UI):
+
+```
+Browser -----> Frontend (:3232) --nginx proxy--> Backend (:8082) ---> Scraper (:8083)
+Your code ---> Browser API (:9222) ---> Managed browser session
+```
+
+## Scraping API
+
+Hit `/scrape` with a URL and get the page content back.
+
+```
+GET http://localhost:8083/scrape?api_key=your-secret-key&url=https://example.com&js_render=true
+```
+
+When `js_render` is off (the default), it uses a fast HTTP client with TLS fingerprinting — no browser needed, responses come back in under 2 seconds. When `js_render=true`, it spins up a headless Camoium browser with full fingerprint spoofing.
+
+You can also pass proxies, wait for CSS selectors, execute JS instructions (clicks, form fills, waits), solve CAPTCHAs, and choose between HTML, Markdown, or screenshot output.
+
+## Browser API
+
+If you need more control than the Scraping API gives you, connect directly to a browser instance over CDP:
+
+```
+ws://localhost:9222/?api_key=your-secret-key&target_os=windows&fingerprint_mode=random
+```
+
+## Local API Documentation
+
+```
+http://localhost:3232/docs/introduction
+```
+### Live API docs with Playground, examples for the Scraping API and Browser API.
+
+```
+http://34.85.113.40:3232/docs
 ```

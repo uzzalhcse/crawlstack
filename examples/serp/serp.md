@@ -4,7 +4,7 @@ A Go script that queries Google Search across multiple locations using UULE enco
 
 ## Prerequisites
 
-- A running scraper API at `http://localhost:8082/v1/`
+- A running scraper API at `http://localhost:8083/scrape/`
 - A valid API key for that service
 - **Docker** (recommended), or [Go](https://golang.org/dl/) 1.18+ for running directly
 
@@ -34,7 +34,7 @@ docker run --rm \
   serp-scraper
 ```
 
-- `--network host` lets the container reach your locally running scraper API on `localhost:8082`
+- `--network host` lets the container reach your locally running scraper API on `localhost:8083`
 - `-v $(pwd)/output:/output` mounts a local `output/` folder so the generated HTML files are saved on your machine
 
 > **Windows (PowerShell):** Replace `$(pwd)` with `${PWD}`.

@@ -47,10 +47,14 @@ func encodeUULEString(uuleString string) (string, error) {
 
 func scrape(baseURL, apiKey, googleURL, targetOS string) (string, error) {
 	params := url.Values{}
-	params.Set("apikey", apiKey)
+	params.Set("api_key", apiKey)
 	params.Set("url", googleURL)
 	params.Set("js_render", "true")
 	params.Set("target_os", targetOS)
+	// set proxy for better result
+	//params.Set("proxy_server", "")
+	//params.Set("proxy_username", "")
+	//params.Set("proxy_password", "")
 
 	resp, err := http.Get(baseURL + "?" + params.Encode())
 	if err != nil {
@@ -70,7 +74,7 @@ func scrape(baseURL, apiKey, googleURL, targetOS string) (string, error) {
 
 func main() {
 	apiKey := "<YOUR_API_KEY>"
-	baseURL := "http://localhost:8082/v1/"
+	baseURL := "http://localhost:8083/scrape/"
 
 	queries := []struct {
 		Query, Region, Location string
